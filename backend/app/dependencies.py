@@ -7,7 +7,6 @@ from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.utils.redis import get_redis
 from app.utils.security import decode_token
 
 bearer = HTTPBearer()
