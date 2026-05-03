@@ -192,7 +192,7 @@ All endpoints return JSON. Auth-required endpoints expect `Authorization: Bearer
 |---|---|---|---|
 | POST | `/api/auth/register` | No | Create account |
 | POST | `/api/auth/login` | No | Get access + refresh tokens |
-| POST | `/api/auth/refresh` | Refresh token | Get new access token |
+| POST | `/api/auth/refresh` | Refresh token | Get new access + refresh tokens (rotation) |
 | POST | `/api/auth/logout` | Yes | Invalidate refresh token |
 
 **POST `/api/auth/register`**
@@ -621,6 +621,9 @@ The `ConnectionManager` is the heart of the realtime system. It:
 
 ```python
 # Conceptual structure (not final implementation)
+from uuid import UUID
+from fastapi import WebSocket
+
 class ConnectionManager:
     # user_id → set of WebSocket connections (supports multiple tabs/devices)
     active_connections: dict[UUID, set[WebSocket]]
@@ -628,11 +631,11 @@ class ConnectionManager:
     # conversation_id → set of user_ids currently subscribed
     conversation_subscribers: dict[UUID, set[UUID]]
 
-    async def connect(self, websocket: WebSocket, user_id: UUID)
-    async def disconnect(self, websocket: WebSocket, user_id: UUID)
-    async def subscribe(self, user_id: UUID, conversation_id: UUID)
-    async def broadcast_to_conversation(self, conversation_id: UUID, message: dict, exclude_sender: UUID | None = None)
-    async def send_to_user(self, user_id: UUID, message: dict)
+    async def connect(self, websocket: WebSocket, user_id: UUID): ...
+    async def disconnect(self, websocket: WebSocket, user_id: UUID): ...
+    async def subscribe(self, user_id: UUID, conversation_id: UUID): ...
+    async def broadcast_to_conversation(self, conversation_id: UUID, message: dict, exclude_sender: UUID | None = None): ...
+    async def send_to_user(self, user_id: UUID, message: dict): ...
 ```
 
 ### 6.3 Redis Pub/Sub (Multi-Process Scaling)
@@ -655,10 +658,15 @@ Register/Login → Server returns { access_token (15min), refresh_token (7 days)
                 → REST requests: Authorization: Bearer <access_token>
                 → WebSocket: ws://host/ws?token=<access_token>
                 → On 401: client calls /auth/refresh with refresh_token
+                → Server returns new access_token + new refresh_token (rotation)
+                → Old refresh token is blacklisted in Redis
+                → New refresh token has a fresh 7-day expiry
                 → On refresh failure: redirect to login
 ```
 
-Refresh tokens are stored in Redis with a TTL matching their expiry. Logout adds the refresh token to a blacklist. Access tokens are short-lived and stateless (no server-side tracking needed).
+Refresh tokens use **rotation**: every time a refresh token is used, the server issues a new one with a fresh 7-day expiry and blacklists the old one in Redis. This means active users stay logged in indefinitely — the 7-day window only applies to inactive users who haven't opened the app in a week. If a blacklisted refresh token is ever used (indicating theft), all refresh tokens for that user should be revoked as a security measure.
+
+Access tokens are short-lived and stateless (no server-side tracking needed).
 
 ---
 
@@ -899,7 +907,7 @@ Deferred to phase 5, but documented here for future decision-making.
 ## 11. Security Considerations
 
 - **Passwords:** bcrypt with cost factor 12; never logged or returned in responses
-- **JWT:** Short-lived access tokens (15min); refresh tokens rotated on use
+- **JWT:** Short-lived access tokens (15min); refresh tokens rotated on every use — each refresh returns a new access token and a new refresh token with a fresh 7-day expiry, while the old refresh token is blacklisted in Redis. Active users stay logged in indefinitely; only users inactive for 7+ days must re-authenticate. Reuse of a blacklisted refresh token triggers revocation of all tokens for that user.
 - **WebSocket auth:** Token validated on handshake; connection closed on expiry (client reconnects with refreshed token)
 - **Input validation:** Pydantic schemas on all endpoints; message content sanitized before storage
 - **CORS:** Restricted to frontend origin in production
