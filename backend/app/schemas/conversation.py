@@ -36,6 +36,14 @@ class ParticipantResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @classmethod
+    def from_model(cls, participant: object) -> "ParticipantResponse":
+        return cls(
+            user_id=participant.user_id,  # type: ignore[attr-defined]
+            username=participant.user.username,  # type: ignore[attr-defined]
+            role=participant.role,  # type: ignore[attr-defined]
+        )
+
 
 class LastMessageResponse(BaseModel):
     content: str
@@ -49,6 +57,16 @@ class ConversationResponse(BaseModel):
     name: str | None
     participants: list[ParticipantResponse]
     created_at: datetime
+
+    @classmethod
+    def from_model(cls, conv: object) -> "ConversationResponse":
+        return cls(
+            id=conv.id,  # type: ignore[attr-defined]
+            type=conv.type,  # type: ignore[attr-defined]
+            name=conv.name,  # type: ignore[attr-defined]
+            participants=[ParticipantResponse.from_model(p) for p in conv.participants],  # type: ignore[attr-defined]
+            created_at=conv.created_at,  # type: ignore[attr-defined]
+        )
 
 
 class ConversationListItem(BaseModel):

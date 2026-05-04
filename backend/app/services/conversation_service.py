@@ -5,8 +5,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationParticipant
+from app.models.message import Message
 from app.models.user import User
-from app.schemas.conversation import CreateConversationRequest, UpdateConversationRequest
+from app.schemas.conversation import (
+    ConversationListItem,
+    CreateConversationRequest,
+    LastMessageResponse,
+    ParticipantResponse,
+    UpdateConversationRequest,
+)
 
 
 async def create(
@@ -60,6 +67,37 @@ async def list_for_user(user_id: UUID, db: AsyncSession) -> list[Conversation]:
         .order_by(Conversation.updated_at.desc())
     )
     return list(result.scalars().unique().all())
+
+
+async def list_with_last_message(user_id: UUID, db: AsyncSession) -> list[ConversationListItem]:
+    conversations = await list_for_user(user_id, db)
+    items = []
+    for conv in conversations:
+        row = await db.execute(
+            select(Message)
+            .where(Message.conversation_id == conv.id, Message.is_deleted.is_(False))
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        last_msg = row.scalar_one_or_none()
+        items.append(
+            ConversationListItem(
+                id=conv.id,
+                type=conv.type,
+                name=conv.name,
+                participants=[ParticipantResponse.from_model(p) for p in conv.participants],
+                last_message=(
+                    LastMessageResponse(
+                        content=last_msg.content,
+                        sender_id=last_msg.sender_id,
+                        created_at=last_msg.created_at,
+                    )
+                    if last_msg
+                    else None
+                ),
+            )
+        )
+    return items
 
 
 async def get(conversation_id: UUID, user_id: UUID, db: AsyncSession) -> Conversation:
