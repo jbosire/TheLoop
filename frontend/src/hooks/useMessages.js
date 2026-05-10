@@ -12,6 +12,9 @@ export function useMessages(conversationId) {
   const [cursor, setCursor] = useState(null)
   const { send } = useWebSocket()
   const pendingRef = useRef(new Map()) // client_msg_id → true while awaiting ack
+  const messagesRef = useRef([])       // stable reference for retryMessage
+
+  useEffect(() => { messagesRef.current = messages }, [messages])
 
   useEffect(() => {
     if (!conversationId) return
@@ -23,7 +26,7 @@ export function useMessages(conversationId) {
 
     getMessages(conversationId)
       .then(({ data }) => {
-        setMessages(data.messages)
+        setMessages([...data.messages].reverse())
         setHasMore(data.has_more)
         setCursor(data.next_cursor)
       })
@@ -35,33 +38,18 @@ export function useMessages(conversationId) {
   const loadMore = useCallback(async () => {
     if (!hasMore || !cursor) return
     const { data } = await getMessages(conversationId, { cursor })
-    setMessages((prev) => [...data.messages, ...prev])
+    setMessages((prev) => [...[...data.messages].reverse(), ...prev])
     setHasMore(data.has_more)
     setCursor(data.next_cursor)
   }, [conversationId, hasMore, cursor])
 
-  const sendMessage = useCallback((content) => {
-    const clientMsgId = uuidv4()
-    const optimistic = {
-      id: null,
-      client_msg_id: clientMsgId,
-      conversation_id: conversationId,
-      sender_id: null,
-      content_type: 'text',
-      content,
-      created_at: new Date().toISOString(),
-      status: 'sending',
-    }
-    pendingRef.current.set(clientMsgId, true)
-    setMessages((prev) => [...prev, optimistic])
-
+  const _dispatchSend = useCallback((clientMsgId, content, contentType) => {
     const sent = send(WS_EVENTS.SEND_MESSAGE, {
       client_msg_id: clientMsgId,
       conversation_id: conversationId,
       content,
-      content_type: 'text',
+      content_type: contentType,
     })
-
     if (!sent) {
       pendingRef.current.delete(clientMsgId)
       setMessages((prev) =>
@@ -69,8 +57,6 @@ export function useMessages(conversationId) {
       )
       return
     }
-
-    // Mark failed if no ack arrives within timeout
     setTimeout(() => {
       if (!pendingRef.current.has(clientMsgId)) return
       pendingRef.current.delete(clientMsgId)
@@ -83,6 +69,37 @@ export function useMessages(conversationId) {
       )
     }, MESSAGE_ACK_TIMEOUT)
   }, [conversationId, send])
+
+  const sendMessage = useCallback((content) => {
+    const clientMsgId = uuidv4()
+    pendingRef.current.set(clientMsgId, true)
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: null,
+        client_msg_id: clientMsgId,
+        conversation_id: conversationId,
+        sender_id: null,
+        content_type: 'text',
+        content,
+        created_at: new Date().toISOString(),
+        status: 'sending',
+      },
+    ])
+    _dispatchSend(clientMsgId, content, 'text')
+  }, [conversationId, _dispatchSend])
+
+  const retryMessage = useCallback((clientMsgId) => {
+    const msg = messagesRef.current.find(
+      (m) => m.client_msg_id === clientMsgId && m.status === 'failed',
+    )
+    if (!msg) return
+    pendingRef.current.set(clientMsgId, true)
+    setMessages((prev) =>
+      prev.map((m) => m.client_msg_id === clientMsgId ? { ...m, status: 'sending' } : m),
+    )
+    _dispatchSend(clientMsgId, msg.content, msg.content_type)
+  }, [_dispatchSend])
 
   const handleNewMessage = useCallback((payload) => {
     if (payload.conversation_id !== conversationId) return
@@ -106,5 +123,5 @@ export function useMessages(conversationId) {
   useWebSocketEvent(WS_EVENTS.NEW_MESSAGE, handleNewMessage)
   useWebSocketEvent(WS_EVENTS.MESSAGE_ACK, handleMessageAck)
 
-  return { messages, loading, hasMore, loadMore, sendMessage }
+  return { messages, loading, hasMore, loadMore, sendMessage, retryMessage }
 }
