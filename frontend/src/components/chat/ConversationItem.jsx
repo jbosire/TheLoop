@@ -10,8 +10,8 @@ export default function ConversationItem({ conversation, isActive, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors ${
-        isActive ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-primary-surface text-left transition-colors ${
+        isActive ? 'bg-primary-surface border-r-2 border-primary' : ''
       }`}
     >
       <Avatar user={participants[0]} />

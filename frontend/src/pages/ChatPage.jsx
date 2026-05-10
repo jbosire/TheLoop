@@ -4,6 +4,7 @@ import ConversationList from '../components/chat/ConversationList'
 import MessageThread from '../components/chat/MessageThread'
 import ComposeArea from '../components/chat/ComposeArea'
 import ConversationDetails from '../components/chat/ConversationDetails'
+import { LogoCompact } from '../components/common/brand'
 import { useMessages } from '../hooks/useMessages'
 import { useWebSocketContext } from '../context/WebSocketContext'
 import { useNavigate } from 'react-router-dom'
@@ -17,8 +18,8 @@ export default function ChatPage() {
 
   const sidebar = (
     <div className="flex flex-col h-full">
-      <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
-        <h1 className="font-bold text-lg text-gray-900">TheLoop</h1>
+      <div className="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
+        <LogoCompact width={110} />
         <div className="flex items-center gap-2">
           <span
             className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-gray-300'}`}

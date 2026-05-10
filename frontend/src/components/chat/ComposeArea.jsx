@@ -37,13 +37,13 @@ export default function ComposeArea({ onSend, disabled }) {
         rows={1}
         placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
         disabled={disabled}
-        className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-y-auto disabled:opacity-50"
+        className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary overflow-y-auto disabled:opacity-50"
         style={{ maxHeight: '8rem' }}
       />
       <button
         onClick={handleSend}
         disabled={!text.trim() || disabled}
-        className="bg-blue-500 text-white rounded-full w-9 h-9 flex items-center justify-center hover:bg-blue-600 disabled:opacity-40 flex-shrink-0 transition-colors"
+        className="bg-primary text-white rounded-full w-9 h-9 flex items-center justify-center hover:bg-primary-dark disabled:opacity-40 flex-shrink-0 transition-colors"
         aria-label="Send"
       >
         <svg className="w-4 h-4 rotate-90" fill="currentColor" viewBox="0 0 24 24">
